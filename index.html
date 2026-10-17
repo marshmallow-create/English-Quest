@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#5b50dc">
+  <title>English Quest — 毎日の学びを冒険に</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="scripts/questions-step2.js"></script>
+  <script defer src="scripts/questions.js"></script>
+  <script defer src="scripts/progress.js"></script>
+  <script defer src="scripts/analysis.js"></script>
+  <script defer src="scripts/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">学習内容へスキップ</a>
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="index.html" aria-label="English Quest ホーム"><span class="brand-mark" aria-hidden="true">✦</span><span>English<span class="brand-accent">Quest</span><small>小さな一歩が、大きな力に。</small></span></a>
+      <nav aria-label="メインナビゲーション">
+        <button type="button" data-action="home">ホーム</button>
+        <button type="button" data-action="records">学習記録</button>
+      </nav>
+    </header>
+    <p id="storage-notice" class="notice" role="status" hidden></p>
+    <main id="main" tabindex="-1"></main>
+    <footer>自分のペースで、ひとつずつ。<br><span>学習データはこのブラウザに保存されます。別端末との同期はなく、ブラウザのデータを削除すると記録も消えます。</span></footer>
+  </div>
+  <noscript><p>English Questを利用するには、ブラウザのJavaScriptを有効にしてください。</p></noscript>
+</body>
+</html>

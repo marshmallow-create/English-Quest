@@ -1,0 +1,452 @@
+[
+  {
+    "id": "eq1-v01",
+    "grade": 1,
+    "category": "vocabulary",
+    "unitId": "g1-words",
+    "prompt": "「図書館」を表す英単語は？",
+    "options": [
+      "library",
+      "station",
+      "kitchen",
+      "garden"
+    ],
+    "answer": "library",
+    "explanation": "library は「図書館」。学校の図書室にも使うことばです。"
+  },
+  {
+    "id": "eq1-v02",
+    "grade": 1,
+    "category": "vocabulary",
+    "unitId": "g1-words",
+    "prompt": "「姉・妹」を表す英単語は？",
+    "options": [
+      "brother",
+      "sister",
+      "father",
+      "uncle"
+    ],
+    "answer": "sister",
+    "explanation": "sister は「姉・妹」。英語では同じ単語で表します。"
+  },
+  {
+    "id": "eq1-v03",
+    "grade": 1,
+    "category": "vocabulary",
+    "unitId": "g1-words",
+    "prompt": "「朝食」を表す英単語は？",
+    "options": [
+      "dinner",
+      "lunch",
+      "breakfast",
+      "food"
+    ],
+    "answer": "breakfast",
+    "explanation": "breakfast は「朝食」、lunch は「昼食」、dinner は「夕食」です。"
+  },
+  {
+    "id": "eq1-v04",
+    "grade": 1,
+    "category": "vocabulary",
+    "unitId": "g1-actions",
+    "prompt": "「泳ぐ」を表す英単語は？",
+    "options": [
+      "read",
+      "walk",
+      "sing",
+      "swim"
+    ],
+    "answer": "swim",
+    "explanation": "swim は「泳ぐ」。I swim in summer. は「私は夏に泳ぎます」。"
+  },
+  {
+    "id": "eq1-v05",
+    "grade": 1,
+    "category": "vocabulary",
+    "unitId": "g1-actions",
+    "prompt": "「忙しい」を表す英単語は？",
+    "options": [
+      "busy",
+      "easy",
+      "happy",
+      "young"
+    ],
+    "answer": "busy",
+    "explanation": "busy は「忙しい」。I am busy. で「私は忙しいです」。"
+  },
+  {
+    "id": "eq1-g01",
+    "grade": 1,
+    "category": "grammar",
+    "unitId": "g1-be",
+    "prompt": "I ___ a student.",
+    "options": [
+      "is",
+      "are",
+      "am",
+      "be"
+    ],
+    "answer": "am",
+    "explanation": "主語が I のとき、be動詞は am を使います。"
+  },
+  {
+    "id": "eq1-g02",
+    "grade": 1,
+    "category": "grammar",
+    "unitId": "g1-be",
+    "prompt": "___ you from Japan?",
+    "options": [
+      "Is",
+      "Are",
+      "Am",
+      "Be"
+    ],
+    "answer": "Are",
+    "explanation": "主語が you の疑問文では Are を文の最初に置きます。"
+  },
+  {
+    "id": "eq1-g03",
+    "grade": 1,
+    "category": "grammar",
+    "unitId": "g1-verbs",
+    "prompt": "She ___ tennis every Sunday.",
+    "options": [
+      "play",
+      "playing",
+      "plays",
+      "to play"
+    ],
+    "answer": "plays",
+    "explanation": "主語が三人称単数の She で現在の習慣を表すので、play に s をつけます。"
+  },
+  {
+    "id": "eq1-g04",
+    "grade": 1,
+    "category": "grammar",
+    "unitId": "g1-verbs",
+    "prompt": "___ you like music?",
+    "options": [
+      "Does",
+      "Are",
+      "Is",
+      "Do"
+    ],
+    "answer": "Do",
+    "explanation": "一般動詞 like を使い、主語が you の疑問文は Do で始めます。"
+  },
+  {
+    "id": "eq1-g05",
+    "grade": 1,
+    "category": "grammar",
+    "unitId": "g1-progressive",
+    "prompt": "Look! Ken is ___ a book.",
+    "options": [
+      "read",
+      "reads",
+      "reading",
+      "to read"
+    ],
+    "answer": "reading",
+    "explanation": "現在進行形は「be動詞 + 動詞のing形」。今、本を読んでいるところです。"
+  },
+  {
+    "id": "eq2-v01",
+    "grade": 2,
+    "category": "vocabulary",
+    "unitId": "g2-words",
+    "prompt": "「博物館」を表す英単語は？",
+    "options": [
+      "hospital",
+      "museum",
+      "factory",
+      "airport"
+    ],
+    "answer": "museum",
+    "explanation": "museum は「博物館・美術館」。hospital は「病院」です。"
+  },
+  {
+    "id": "eq2-v02",
+    "grade": 2,
+    "category": "vocabulary",
+    "unitId": "g2-words",
+    "prompt": "「文化」を表す英単語は？",
+    "options": [
+      "weather",
+      "country",
+      "culture",
+      "subject"
+    ],
+    "answer": "culture",
+    "explanation": "culture は「文化」。食べ物や暮らしなどの文化について使えます。"
+  },
+  {
+    "id": "eq2-v03",
+    "grade": 2,
+    "category": "vocabulary",
+    "unitId": "g2-words",
+    "prompt": "「外国の」を表す英単語は？",
+    "options": [
+      "foreign",
+      "famous",
+      "friendly",
+      "free"
+    ],
+    "answer": "foreign",
+    "explanation": "foreign は「外国の」。a foreign language で「外国語」です。"
+  },
+  {
+    "id": "eq2-v04",
+    "grade": 2,
+    "category": "vocabulary",
+    "unitId": "g2-feelings",
+    "prompt": "「わくわくした」を表す英単語は？",
+    "options": [
+      "tired",
+      "hungry",
+      "angry",
+      "excited"
+    ],
+    "answer": "excited",
+    "explanation": "excited は「わくわくした・興奮した」。自分の気持ちを表します。"
+  },
+  {
+    "id": "eq2-v05",
+    "grade": 2,
+    "category": "vocabulary",
+    "unitId": "g2-feelings",
+    "prompt": "「〜を決める」を表す英単語は？",
+    "options": [
+      "forget",
+      "decide",
+      "borrow",
+      "arrive"
+    ],
+    "answer": "decide",
+    "explanation": "decide は「〜を決める」。decide to ... で「〜することに決める」です。"
+  },
+  {
+    "id": "eq2-g01",
+    "grade": 2,
+    "category": "grammar",
+    "unitId": "g2-time",
+    "prompt": "We ___ to the park yesterday.",
+    "options": [
+      "go",
+      "goes",
+      "went",
+      "going"
+    ],
+    "answer": "went",
+    "explanation": "yesterday は「昨日」。go の過去形 went を使います。"
+  },
+  {
+    "id": "eq2-g02",
+    "grade": 2,
+    "category": "grammar",
+    "unitId": "g2-time",
+    "prompt": "I am going ___ visit Kyoto tomorrow.",
+    "options": [
+      "to",
+      "for",
+      "at",
+      "with"
+    ],
+    "answer": "to",
+    "explanation": "「be going to + 動詞の原形」で、これからの予定を表します。"
+  },
+  {
+    "id": "eq2-g03",
+    "grade": 2,
+    "category": "grammar",
+    "unitId": "g2-infinitive",
+    "prompt": "I want ___ a doctor.",
+    "options": [
+      "become",
+      "becomes",
+      "becoming",
+      "to become"
+    ],
+    "answer": "to become",
+    "explanation": "want to + 動詞の原形で「〜したい」。want to become は「〜になりたい」です。"
+  },
+  {
+    "id": "eq2-g04",
+    "grade": 2,
+    "category": "grammar",
+    "unitId": "g2-infinitive",
+    "prompt": "She enjoys ___ pictures.",
+    "options": [
+      "take",
+      "taking",
+      "to take",
+      "takes"
+    ],
+    "answer": "taking",
+    "explanation": "enjoy の後に動詞を続けるときはing形（動名詞）を使います。"
+  },
+  {
+    "id": "eq2-g05",
+    "grade": 2,
+    "category": "grammar",
+    "unitId": "g2-comparison",
+    "prompt": "This bag is ___ than that one.",
+    "options": [
+      "big",
+      "biggest",
+      "bigger",
+      "as big"
+    ],
+    "answer": "bigger",
+    "explanation": "than を使ってふたつを比べるので比較級 bigger。big は g を重ねて er をつけます。"
+  },
+  {
+    "id": "eq3-v01",
+    "grade": 3,
+    "category": "vocabulary",
+    "unitId": "g3-words",
+    "prompt": "「環境」を表す英単語は？",
+    "options": [
+      "environment",
+      "experience",
+      "education",
+      "energy"
+    ],
+    "answer": "environment",
+    "explanation": "environment は「環境」。自然や身のまわりの環境について使います。"
+  },
+  {
+    "id": "eq3-v02",
+    "grade": 3,
+    "category": "vocabulary",
+    "unitId": "g3-words",
+    "prompt": "「〜を守る・保護する」を表す英単語は？",
+    "options": [
+      "produce",
+      "provide",
+      "protect",
+      "prepare"
+    ],
+    "answer": "protect",
+    "explanation": "protect は「〜を守る・保護する」。protect nature は「自然を守る」です。"
+  },
+  {
+    "id": "eq3-v03",
+    "grade": 3,
+    "category": "vocabulary",
+    "unitId": "g3-words",
+    "prompt": "「経験」を表す英単語は？",
+    "options": [
+      "example",
+      "exercise",
+      "exchange",
+      "experience"
+    ],
+    "answer": "experience",
+    "explanation": "experience は「経験」。an interesting experience は「おもしろい経験」です。"
+  },
+  {
+    "id": "eq3-v04",
+    "grade": 3,
+    "category": "vocabulary",
+    "unitId": "g3-ideas",
+    "prompt": "「可能な」を表す英単語は？",
+    "options": [
+      "popular",
+      "possible",
+      "personal",
+      "perfect"
+    ],
+    "answer": "possible",
+    "explanation": "possible は「可能な」。Its opposite（反対語）は impossible「不可能な」です。"
+  },
+  {
+    "id": "eq3-v05",
+    "grade": 3,
+    "category": "vocabulary",
+    "unitId": "g3-ideas",
+    "prompt": "「〜を信じる」を表す英単語は？",
+    "options": [
+      "believe",
+      "belong",
+      "bring",
+      "build"
+    ],
+    "answer": "believe",
+    "explanation": "believe は「〜を信じる」。believe in yourself で「自分を信じる」です。"
+  },
+  {
+    "id": "eq3-g01",
+    "grade": 3,
+    "category": "grammar",
+    "unitId": "g3-perfect",
+    "prompt": "I have ___ visited Canada.（一度も訪れたことがない）",
+    "options": [
+      "ever",
+      "already",
+      "just",
+      "never"
+    ],
+    "answer": "never",
+    "explanation": "「have never + 過去分詞」で「一度も〜したことがない」という経験を表します。"
+  },
+  {
+    "id": "eq3-g02",
+    "grade": 3,
+    "category": "grammar",
+    "unitId": "g3-perfect",
+    "prompt": "She has lived here ___ 2020.",
+    "options": [
+      "for",
+      "since",
+      "during",
+      "at"
+    ],
+    "answer": "since",
+    "explanation": "since は継続の始まった時点を示します。for は for three years のように期間に使います。"
+  },
+  {
+    "id": "eq3-g03",
+    "grade": 3,
+    "category": "grammar",
+    "unitId": "g3-passive",
+    "prompt": "This book was ___ by Soseki.",
+    "options": [
+      "write",
+      "wrote",
+      "written",
+      "writing"
+    ],
+    "answer": "written",
+    "explanation": "受動態は「be動詞 + 過去分詞」。write の過去分詞は written です。"
+  },
+  {
+    "id": "eq3-g04",
+    "grade": 3,
+    "category": "grammar",
+    "unitId": "g3-relative",
+    "prompt": "I know a girl ___ can speak French.",
+    "options": [
+      "who",
+      "which",
+      "what",
+      "when"
+    ],
+    "answer": "who",
+    "explanation": "人を説明し、後ろの節の主語になる関係代名詞は who。この選択肢では who だけが適切です。"
+  },
+  {
+    "id": "eq3-g05",
+    "grade": 3,
+    "category": "grammar",
+    "unitId": "g3-relative",
+    "prompt": "The boy ___ soccer over there is my brother.",
+    "options": [
+      "play",
+      "plays",
+      "played",
+      "playing"
+    ],
+    "answer": "playing",
+    "explanation": "「向こうでサッカーをしている少年」と説明するには、名詞の後ろに現在分詞 playing を置きます。"
+  }
+]
