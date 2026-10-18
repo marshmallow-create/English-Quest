@@ -1,0 +1,4 @@
+# 登録・ログインは関数内でユーザー名とパスワードを認証するため、未ログインから呼び出せる。
+# publishableキーの照合、入力検証、永続的な試行回数制限を関数内に実装。
+[functions.username-auth]
+verify_jwt = false

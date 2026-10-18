@@ -1,0 +1,9 @@
+.git
+.cache
+.env*
+tests
+Markdown
+supabase
+README.md
+node_modules
+dist

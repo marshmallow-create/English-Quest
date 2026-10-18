@@ -1,1 +1,7 @@
 tests/artifacts/
+.cache/
+dist/
+.vercel/
+.env*
+!.env.example
+node_modules/

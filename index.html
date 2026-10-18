@@ -10,6 +10,9 @@
   <script defer src="scripts/questions.js"></script>
   <script defer src="scripts/progress.js"></script>
   <script defer src="scripts/analysis.js"></script>
+  <script defer src="scripts/config.js"></script>
+  <script defer src="scripts/identity.js"></script>
+  <script defer src="scripts/cloud.js"></script>
   <script defer src="scripts/app.js"></script>
 </head>
 <body>
@@ -20,11 +23,12 @@
       <nav aria-label="メインナビゲーション">
         <button type="button" data-action="home">ホーム</button>
         <button type="button" data-action="records">学習記録</button>
+        <button type="button" data-action="account">保存・同期</button>
       </nav>
     </header>
     <p id="storage-notice" class="notice" role="status" hidden></p>
     <main id="main" tabindex="-1"></main>
-    <footer>自分のペースで、ひとつずつ。<br><span>学習データはこのブラウザに保存されます。別端末との同期はなく、ブラウザのデータを削除すると記録も消えます。</span></footer>
+    <footer>自分のペースで、ひとつずつ。<br><span>登録なしで学習できます。ゲストの記録はこのブラウザに保存されます。「保存・同期」からバックアップ・任意ログインを利用できます。</span></footer>
   </div>
   <noscript><p>English Questを利用するには、ブラウザのJavaScriptを有効にしてください。</p></noscript>
 </body>

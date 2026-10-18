@@ -30,4 +30,16 @@
 .recommendation>span:last-child{font-size:.75rem;color:#6653b5;flex-shrink:0}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:620px){.analysis-panel{padding:20px 15px}.analysis-panel .section-heading .tag{margin-top:12px}.analysis-grid{grid-template-columns:1fr;gap:13px}.coverage-card,.weekly-card{padding:18px 14px}.activity-chart{gap:6px}.activity-chart time{font-size:.63rem}.recommendation{align-items:flex-start;flex-direction:column;gap:9px}.recommendation strong{font-size:.82rem}.recommendation small{font-size:.66rem}}
+.account-panel{padding:28px;background:#fff;border:1px solid var(--line);border-radius:20px;margin:20px 0;box-shadow:var(--shadow)}
+.account-panel h2{font-size:1.2rem}.account-panel h3{font-size:1rem;margin-top:24px}
+.account-panel p{color:var(--muted);font-size:.85rem;overflow-wrap:anywhere}
+.backup-summary{display:flex;flex-wrap:wrap;gap:12px 24px;padding:16px;background:#f4f1fc;border-radius:12px;font-size:.85rem;margin:15px 0}
+.file-label,.account-panel form label{display:block;font-weight:700;font-size:.85rem;margin:18px 0 9px}
+.account-panel input{font:inherit;border:1px solid #b8bed3;border-radius:9px;padding:13px;width:100%;max-width:480px;min-width:0;background:#fff;color:var(--ink)}
+.account-panel input:focus-visible{outline:3px solid #284fc4;outline-offset:3px}.account-panel input[type=file]{font-size:.78rem}
+.account-panel form>small{display:block;max-width:480px;color:var(--muted);line-height:1.8;margin-top:8px}
+.account-actions{display:flex;flex-wrap:wrap;gap:12px;margin:20px 0}
+.import-preview,.sync-conflict{border:1px solid #d7c9ec;border-radius:13px;background:#faf6ff;padding:18px;margin-top:20px}
+.import-preview h3,.sync-conflict h3{margin-top:0}.sync-conflict>.secondary{margin:6px 6px 6px 0}
+@media(max-width:620px){.account-panel{padding:22px 16px}.account-panel p{font-size:.8rem}.account-actions{flex-direction:column}.topbar{flex-wrap:wrap;padding:17px 0}.topbar nav{margin-left:auto}.sync-conflict>.secondary{width:100%;font-size:.8rem;padding:14px 10px}.backup-summary{font-size:.78rem;gap:9px 15px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

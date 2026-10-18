@@ -2,11 +2,24 @@
   'use strict';
   const {questions, units} = window.QuestData;
   const P = window.QuestProgress;
+  const C = window.QuestCloud;
   // localStorage のプロパティアクセス自体が禁止されている環境にも対応。
   let storage;
   try { storage = window.localStorage; } catch { storage = {getItem(){throw new Error('Storage unavailable');},setItem(){throw new Error('Storage unavailable');}}; }
   const loaded = P.load(storage,questions);
-  const progress = loaded.progress;
+  let progress = loaded.progress;
+  let activeStorage = storage;
+  let cloud = null;
+  let cloudMessage = 'ログイン・同期は公開版の接続設定後に利用できます。バックアップは今すぐ利用できます。';
+  try { cloud = C.createClient(window.QuestConfig || {},{storage});if(cloud)cloudMessage='ログインすると、この端末とクラウドの学習記録を同期できます。'; } catch(error) { cloudMessage=error.message; }
+  let currentUser = null;
+  let revision;
+  let dirty = false;
+  let busy = false;
+  let conflict = null;
+  let generation = 0;
+  let syncTimer;
+  let pendingImport = null;
   const main = document.getElementById('main');
   let grade = 1;
   let category = 'vocabulary';
@@ -25,7 +38,85 @@
   }
   notice(loaded.notice);
   function persist() {
-    if (!P.save(storage,progress)) notice('学習記録を保存できませんでした。保存容量やブラウザ設定をご確認ください。今回の記録は画面を閉じると失われる可能性があります。');
+    if (!P.save(activeStorage,progress)) notice('学習記録を保存できませんでした。保存容量やブラウザ設定をご確認ください。今回の記録は画面を閉じると失われる可能性があります。');
+    if(currentUser) { dirty=true;saveMeta();clearTimeout(syncTimer);syncTimer=setTimeout(pushCloud,500); }
+  }
+  function saveMeta() {
+    if(!currentUser)return;
+    try{storage.setItem(C.userKey(currentUser.id)+':sync',JSON.stringify({revision,dirty}));}catch{notice('このブラウザへの保存が制限されています。画面を閉じる前にバックアップを書き出してください。');}
+  }
+  function accountChanged() {if(screen==='account')accountScreen(false);}
+  function storeAccount(data,version) {
+    progress=P.normalize(data,questions);revision=version;dirty=false;conflict=null;
+    if(!P.save(activeStorage,progress))notice('クラウドの記録は読み込めましたが、ブラウザへの保存に失敗しました。');
+    saveMeta();
+  }
+  function switchUser(user) {
+    generation++;clearTimeout(syncTimer);busy=false;conflict=null;pendingImport=null;quest=null;
+    currentUser=user;
+    activeStorage=user?C.scopedStorage(storage,user.id):storage;
+    const next=P.load(activeStorage,questions);
+    progress=next.progress;
+    revision=undefined;dirty=false;
+    if(user){
+      try{const meta=JSON.parse(storage.getItem(C.userKey(user.id)+':sync'));if(meta){revision=meta.revision;dirty=Boolean(meta.dirty);}}catch{dirty=true;}
+      // メタ情報を保存できなかった記録を、未保存の変更として保護する。
+      if(revision===undefined && (progress.answered||progress.xp||progress.sessions))dirty=true;
+    }
+    if(next.notice)notice(next.notice);
+  }
+  async function refreshCloud() {
+    if(!cloud||!currentUser||busy)return;
+    const ticket=generation;busy=true;cloudMessage='クラウドの記録を確認しています…';accountChanged();
+    try{
+      const remote=await cloud.read();
+      if(ticket!==generation)return;
+      const remoteProgress=remote?C.parseBackup(JSON.stringify(remote.progress),P,questions):null;
+      if(remote && C.same(progress,remoteProgress)){revision=remote.revision;dirty=false;conflict=null;saveMeta();cloudMessage='同期済みです。';}
+      else if(remote && !dirty && screen!=='quiz') {storeAccount(remoteProgress,remote.revision);cloudMessage='クラウドの記録を読み込みました。';}
+      else if(remote && (revision!==remote.revision || screen==='quiz')) {conflict={progress:remoteProgress,revision:remote.revision};cloudMessage='端末とクラウドに異なる記録があります。使う記録を選んでください。';}
+      else if(!remote){revision=null;saveMeta();cloudMessage=dirty?'端末の記録をクラウドに保存します。':'クラウドの記録はまだありません。学習すると同期されます。';}
+      else cloudMessage='端末に未同期の記録があります。';
+    }catch(error){if(ticket===generation)cloudMessage=error.message;}
+    finally{if(ticket===generation){busy=false;accountChanged();}}
+    if(ticket===generation&&dirty&&!conflict&&revision!==undefined)await pushCloud();
+  }
+  async function pushCloud() {
+    if(!cloud||!currentUser||busy||conflict||!dirty||revision===undefined)return;
+    const ticket=generation;
+    const snapshot=structuredClone(progress);
+    busy=true;let succeeded=false;cloudMessage='記録を同期しています…';accountChanged();
+    try{
+      const result=await cloud.write(snapshot,revision);
+      if(ticket!==generation)return;
+      revision=result.revision;dirty=!C.same(progress,snapshot);saveMeta();succeeded=true;
+      cloudMessage=dirty?'新しい回答を同期しています…':'同期済みです。';
+    }catch(error){
+      if(ticket!==generation)return;
+      cloudMessage=error.message;
+      if(error.status===409){
+        try{const remote=await cloud.read();if(ticket===generation&&remote)conflict={progress:C.parseBackup(JSON.stringify(remote.progress),P,questions),revision:remote.revision};}catch{ /* 端末の未同期記録は保持 */ }
+      }
+    }finally{if(ticket===generation){busy=false;accountChanged();}}
+    if(ticket===generation&&succeeded&&dirty&&!conflict){clearTimeout(syncTimer);syncTimer=setTimeout(pushCloud,500);}
+  }
+  async function login(username,password,signup) {
+    if(!cloud||busy)return;
+    if(signup&&!window.QuestConfig?.signupEnabled){cloudMessage='新規登録は一時停止中です。ゲスト学習・バックアップをご利用ください。';accountChanged();return;}
+    busy=true;cloudMessage='ログイン情報を確認しています…';accountChanged();
+    try{
+      const user=signup?await cloud.signUp(username,password):await cloud.signIn(username,password);
+      if(user){switchUser(user);cloudMessage='ログインしました。ゲストの記録は別に残しています。';await refreshCloud();}
+      else cloudMessage='登録・ログインを完了できませんでした。再試行してください。';
+    }catch(error){cloudMessage=error.message;}
+    finally{busy=false;accountChanged();}
+  }
+  async function logout() {
+    if(!cloud||busy)return;
+    busy=true;generation++;clearTimeout(syncTimer);accountChanged();
+    const error=await cloud.signOut();switchUser(null);
+    cloudMessage=error?'この端末からログアウトしました。通信できなかったため、サーバー側のセッション終了は確認できませんでした。':'ログアウトしました。ゲストの記録に戻りました。';
+    accountChanged();
   }
   function display(html, focus = true) {
     main.innerHTML = html;
@@ -121,6 +212,72 @@
       ${mistakes.length?`<div class="mistake-list"><h2>次はきっと、できる。</h2><p>今回まちがえた${mistakes.length}問を復習リストに登録しました。</p>${mistakes.map(q=>`<details><summary>${esc(q.prompt)}</summary><p>正解：<strong>${esc(q.answer)}</strong></p><p>${esc(q.explanation)}</p></details>`).join('')}</div>`:'<p class="perfect-message">✦ 全問正解、おめでとう！</p>'}
       <div class="result-actions">${mistakes.length?'<button class="primary" data-action="retry-mistakes">まちがえた問題を復習 →</button>':''}<button class="${mistakes.length?'secondary':'primary'}" data-action="retry">もう一度挑戦</button><button class="text-button" data-action="home">ホームへ戻る</button></div></section>`);
   }
+  function accountScreen(focus=true) {
+    screen='account';
+    const disabled=busy?'disabled':'';
+    display(`${back()}<div class="page-heading"><p class="eyebrow">SAVE YOUR ADVENTURE</p><h1>保存・同期</h1><p>登録なしでも学習できます。大切な記録を、自分の方法で保存しよう。</p></div>
+      <section class="account-panel"><h2>${currentUser?'アカウントで学習中':'ゲストで学習中'}</h2><p>${currentUser?`ログイン中：${esc(currentUser.username||'学習者')}<br>アカウントの記録とゲストの記録は別に保存します。`:'今の記録はこのブラウザに保存されています。'}</p><div class="backup-summary"><span>累計 <strong>${progress.xp} XP</strong></span><span><strong>${progress.answered}回</strong>回答</span><span>復習 <strong>${progress.reviewIds.length}問</strong></span></div>
+      <h3>バックアップ</h3><p>ファイルを書き出して、別の端末や公開版の「取り込み」から続けられます。ログイン情報は含みません。</p><button class="secondary" data-action="export">記録を書き出す</button><label class="file-label" for="backup-file">バックアップを取り込む（JSON・4MBまで）</label><input id="backup-file" type="file" accept=".json,application/json" ${disabled}>
+      ${pendingImport?`<div class="import-preview"><h3>取り込む記録の確認</h3><p>${pendingImport.xp} XP · ${pendingImport.answered}回回答 · 復習${pendingImport.reviewIds.length}問<br>現在表示中の記録を置き換えます。現在の記録はブラウザの復旧用キーにも退避します。</p><button class="primary" data-action="confirm-import" ${disabled}>この記録で置き換える</button> <button class="text-button" data-action="cancel-import">キャンセル</button></div>`:''}</section>
+      <section class="account-panel"><h2>任意ログイン・クラウド同期</h2><p id="cloud-status" role="status">${esc(cloudMessage)}</p>
+      ${cloud?currentUser?`<p>回答は端末に保存してから同期します。通信が戻ったら「同期する」で再試行できます。</p><div class="account-actions"><button class="primary" data-action="sync" ${disabled}>同期する</button><button class="secondary" data-action="sign-out" ${disabled}>ログアウト</button></div><button class="text-button" data-action="copy-guest" ${disabled}>ゲスト記録をこのアカウントに取り込む →</button>
+      ${conflict?`<div class="sync-conflict"><h3>どちらの記録を使いますか？</h3><p>自動で足し合わせず、両方の記録を残したまま選べます。選択前に必要な記録を書き出してください。</p><div class="backup-summary"><span>この端末：${progress.xp} XP / ${progress.answered}回回答</span><span>クラウド：${conflict.progress.xp} XP / ${conflict.progress.answered}回回答</span></div><button class="secondary" data-action="use-cloud" ${disabled}>クラウドの記録をこの端末で使う</button><button class="secondary" data-action="use-local" ${disabled}>この端末の記録でクラウドを置き換える</button></div>`:''}`:`<p>ユーザー名とパスワードで登録・ログインできます。メールアドレスやメール確認は不要です。同じアカウントなら、別のスマホでも成績や進捗を引き継げます。</p><form id="account-form"><label for="account-username">ユーザー名</label><input id="account-username" type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]{3,24}" aria-describedby="username-help" required ${disabled}><small id="username-help">半角英字・数字・_、3〜24文字（例：hana_01）。大文字と小文字は区別しません。</small><label for="account-password">パスワード（半角英数字・記号8〜64文字）</label><input id="account-password" type="password" name="password" minlength="8" maxlength="64" autocomplete="current-password" required ${disabled}><div class="account-actions"><button class="primary" type="submit" name="intent" value="login" ${disabled}>ログイン</button><button class="secondary" type="submit" name="intent" value="signup" ${disabled}>新規登録</button></div></form>`:''}
+      ${cloud&&!currentUser&&!window.QuestConfig?.signupEnabled?'<p class="notice">新規登録は一時停止中です。ゲスト学習と既存アカウントのログインは利用できます。</p>':''}
+      <p class="hint">共有端末では、学習後にログアウトしてください。ゲストの記録とバックアップは、ブラウザデータやファイルを削除すると失われます。ログイン後も、ファイルの保管先にご注意ください。</p></section>`,focus);
+    const signupButton=main.querySelector('button[value="signup"]');
+    if(signupButton&&!window.QuestConfig?.signupEnabled)signupButton.disabled=true;
+  }
+  function exportProgress() {
+    const content=JSON.stringify({application:'english-quest',formatVersion:1,exportedAt:new Date().toISOString(),data:progress},null,2);
+    const url=URL.createObjectURL(new Blob([content],{type:'application/json'}));
+    const link=document.createElement('a');link.href=url;link.download=`english-quest-${P.dayKey()}-${Date.now()}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  function confirmImport() {
+    if(!pendingImport||busy)return;
+    // 退避に失敗したら置き換えを中止。元の記録を保護する。
+    try{activeStorage.setItem(P.KEY+'-before-import',JSON.stringify(progress));}
+    catch{cloudMessage='現在の記録を退避できませんでした。取り込みを中止しました。先に書き出しや保存容量をご確認ください。';accountChanged();return;}
+    const previous=progress;
+    progress=pendingImport;
+    if(!P.save(activeStorage,progress)){progress=previous;cloudMessage='取り込みを保存できませんでした。現在の記録は変更していません。';accountChanged();return;}
+    pendingImport=null;quest=null;cloudMessage='記録を取り込みました。';
+    if(currentUser){dirty=true;saveMeta();clearTimeout(syncTimer);refreshCloud();}
+    accountChanged();
+  }
+  async function resolveConflict(useLocal) {
+    if(!conflict||busy||!currentUser)return;
+    try{
+      activeStorage.setItem(P.KEY+'-before-sync',JSON.stringify(progress));
+      if(useLocal){
+        // 最後に確認したクラウドの版だけを更新。直後に他端末で変更された場合も上書きしない。
+        const remoteVersion=conflict.revision;
+        try{activeStorage.setItem(P.KEY+'-cloud-before-sync',JSON.stringify(conflict.progress));}catch{throw new Error('クラウド記録を退避できませんでした。先に保存容量をご確認ください。');}
+        revision=remoteVersion;conflict=null;dirty=true;saveMeta();await pushCloud();
+      }else{
+        const ticket=generation;busy=true;accountChanged();
+        try{const remote=await cloud.read();if(ticket!==generation)return;if(!remote)throw new Error('クラウド記録が見つかりませんでした。');storeAccount(C.parseBackup(JSON.stringify(remote.progress),P,questions),remote.revision);cloudMessage='クラウドの記録をこの端末に復元しました。';}
+        finally{if(ticket===generation)busy=false;}
+      }
+    }catch(error){cloudMessage=error.message;}
+    accountChanged();
+  }
+  document.addEventListener('submit',event=>{
+    if(event.target.id!=='account-form')return;
+    event.preventDefault();
+    const fields=new FormData(event.target);
+    login(String(fields.get('username')),String(fields.get('password')),event.submitter?.value==='signup');
+  });
+  document.addEventListener('change',async event=>{
+    if(event.target.id!=='backup-file')return;
+    const file=event.target.files?.[0];if(!file)return;
+    const ticket=generation;
+    try{
+      if(file.size>4*1024*1024)throw new Error('4MB以下のファイルを選んでください。');
+      const text=await file.text();if(ticket!==generation)return;
+      pendingImport=C.parseBackup(text,P,questions);cloudMessage='取り込む記録を確認してください。まだ現在の記録は変更していません。';
+    }catch(error){pendingImport=null;cloudMessage=error.message;}
+    accountChanged();
+  });
   function analysisPanel() {
     const analysis = window.QuestAnalysis.summarize(progress,questions,units);
     const coverage = analysis.grades.find(g=>g.grade===grade);
@@ -145,6 +302,15 @@
     switch (button.dataset.action) {
       case 'home': case 'exit': home(); break;
       case 'records': records(); break;
+      case 'account': accountScreen(); break;
+      case 'export': exportProgress(); break;
+      case 'confirm-import': confirmImport(); break;
+      case 'cancel-import': pendingImport=null;accountChanged();break;
+      case 'copy-guest': pendingImport=P.load(storage,questions).progress;accountChanged();break;
+      case 'sync': refreshCloud();break;
+      case 'sign-out': logout();break;
+      case 'use-cloud': resolveConflict(false);break;
+      case 'use-local': resolveConflict(true);break;
       case 'grade': {
         grade=Number(button.dataset.grade);
         home(false);
@@ -170,5 +336,14 @@
       case 'retry-mistakes': start(quest.answers.filter(a=>!a.correct).map(a=>questions.find(q=>q.id===a.id)),`中${grade} · 苦手の復習`); break;
     }
   });
+  // 確認メールのリダイレクトに認証情報が含まれていても、URLに残さない。
+  if(location.hash.includes('access_token=')||location.hash.includes('error_description=')){
+    history.replaceState(null,'',location.pathname+location.search);
+    cloudMessage='「保存・同期」からログインしてください。';
+  }
+  if(cloud?.user){
+    try{switchUser(cloud.user);}catch(error){cloudMessage=error.message;}
+  }
   home(false);
+  if(cloud?.user)cloud.restore().then(()=>refreshCloud()).catch(error=>{cloudMessage=error.message;accountChanged();});
 })();

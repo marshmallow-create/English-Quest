@@ -60,7 +60,7 @@ test('Edge実画面: 全コース・単元・復習・再起動保存・移行�
   }
   try{
     await connect();
-    const url=pathToFileURL(path.resolve(__dirname,'../index.html')).href;
+    const url=process.env.QUEST_TEST_URL||pathToFileURL(path.resolve(__dirname,'../index.html')).href;
     async function navigate(){
       await cdp.send('Page.navigate',{url});
       for(let i=0;i<100;i++){
@@ -92,6 +92,39 @@ test('Edge実画面: 全コース・単元・復習・再起動保存・移行�
     await navigate();
     await cdp.evaluate('localStorage.clear()');await navigate();
     await viewport(1280,1100);await noOverflow();await screenshot('home-desktop');
+    async function waitFor(expression){
+      for(let i=0;i<150;i++){if(await cdp.evaluate(expression))return;await pause(50);}
+      throw Error('Timed out: '+expression);
+    }
+    async function selectFile(filename){
+      const doc=await cdp.send('DOM.getDocument');
+      const node=await cdp.send('DOM.querySelector',{nodeId:doc.root.nodeId,selector:'#backup-file'});
+      await cdp.send('DOM.setFileInputFiles',{nodeId:node.nodeId,files:[filename]});
+    }
+    await t.test('バックアップは確認後に取り込み、元記録を退避。破損ファイルでは変更しない',async()=>{
+      const fixture={...P.empty(),xp:70,answered:5,correct:5,sessions:1};
+      const filename=path.join(artifacts,'import-test.json');
+      await fs.writeFile(filename,JSON.stringify({application:'english-quest',formatVersion:1,data:fixture}));
+      await click('[data-action="account"]');await viewport(320);await noOverflow();
+      await selectFile(filename);await waitFor(`!!document.querySelector('[data-action="confirm-import"]')`);
+      assert.equal(await saved(),null,'確認前には取り込まない');
+      await click('[data-action="confirm-import"]');assert.equal((await saved()).xp,70);
+      assert.equal(await cdp.evaluate(`JSON.parse(localStorage.getItem('english-quest-v2-before-import')).xp`),0);
+      const invalid=path.join(artifacts,'invalid-test.json');await fs.writeFile(invalid,'{broken');
+      await selectFile(invalid);await waitFor(`document.querySelector('#cloud-status').textContent.includes('読み取れません')`);
+      assert.equal((await saved()).xp,70);
+      await cdp.send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:artifacts});
+      const existingExports=new Set(await fs.readdir(artifacts));
+      await click('[data-action="export"]');
+      let exported;
+      for(let i=0;i<100;i++){
+        exported=(await fs.readdir(artifacts)).find(name=>/^english-quest-.*\.json$/.test(name)&&!existingExports.has(name));if(exported)break;await pause(50);
+      }
+      assert.ok(exported,'JSONバックアップを書き出した');
+      const backup=JSON.parse(await fs.readFile(path.join(artifacts,exported),'utf8'));
+      assert.equal(backup.data.xp,70);assert.equal(backup.application,'english-quest');assert.equal(backup.access_token,undefined);
+      await cdp.evaluate('localStorage.clear()');await navigate();await viewport(1280,1100);
+    });
     await t.test('初回の学習分析は未回答を0%扱いせず、未挑戦の案内を表示',async()=>{
       await click('[data-action="records"]');
       assert.match(await cdp.evaluate(`document.querySelector('.coverage-count').textContent`),/0\s*\/\s*100問/);
@@ -221,6 +254,68 @@ test('Edge実画面: 全コース・単元・復習・再起動保存・移行�
       await correctAnswer();
       assert.match(await cdp.evaluate(`document.querySelector('#storage-notice').textContent`),/保存できません/);
       assert.match(await text(),/次の問題へ/);
+      await cdp.send('Page.removeScriptToEvaluateOnNewDocument',{identifier:injection.identifier});
+    });
+    await t.test('任意ログイン・アカウント分離・再接続同期・競合選択・ログアウトを画面で検証',async()=>{
+      const mockSource=`(()=>{
+        const settings={supabaseUrl:'https://testing.supabase.co',supabasePublishableKey:'sb_publishable_testing',signupEnabled:true};
+        Object.defineProperty(window,'QuestConfig',{configurable:true,get:()=>settings,set:()=>{}});
+        const user={id:'11111111-1111-4111-8111-111111111111',user_metadata:{username:'hana_01'}};
+        window.eqMock={offline:false,remote:null,calls:[]};
+        const nativeFetch=window.fetch;
+        window.fetch=async(url,init={})=>{
+          if(!String(url).startsWith(settings.supabaseUrl))return nativeFetch(url,init);
+          const state=window.eqMock;state.calls.push({url:String(url),method:init.method,body:init.body});
+          if(state.offline)throw Error('offline');
+          const reply=(data,status=200)=>new Response(data===null?'':JSON.stringify(data),{status});
+          if(String(url).includes('/auth/v1/token')||String(url).includes('/functions/v1/username-auth'))return reply({access_token:'test-access',refresh_token:'test-refresh',expires_in:3600,user});
+          if(String(url).includes('/auth/v1/user'))return reply(user);
+          if(String(url).includes('/auth/v1/logout'))return reply(null);
+          if(init.method==='GET')return reply(state.remote?[state.remote]:[]);
+          if(init.method==='POST'&&state.remote)return reply({},409);
+          if(init.method==='PATCH'&&new URL(url).searchParams.get('revision')!=='eq.'+state.remote?.revision)return reply([]);
+          const body=JSON.parse(init.body);state.remote={progress:body.progress,revision:body.revision};return reply([state.remote]);
+        };
+      })();`;
+      const injection=await cdp.send('Page.addScriptToEvaluateOnNewDocument',{source:mockSource});
+      await navigate();
+      await cdp.evaluate(`localStorage.clear();localStorage.setItem('english-quest-v2',JSON.stringify({...QuestProgress.empty(),xp:70,answered:5,correct:5,sessions:1}))`);
+      await navigate();await click('[data-action="account"]');
+      assert.equal(await cdp.evaluate(`document.querySelector('input[type="email"]')`),null);
+      await viewport(320);await noOverflow();await screenshot('username-login-mobile');
+      await cdp.evaluate(`document.querySelector('#account-username').value='HANA_01';document.querySelector('#account-password').value='password123';document.querySelector('#account-form').requestSubmit(document.querySelector('button[value="signup"]'))`);
+      await waitFor(`!!document.querySelector('[data-action="copy-guest"]')&&!document.querySelector('[data-action="sync"]').disabled`);
+      assert.match(await text(),/累計 0 XP/,'ゲストの記録を自動混入しない');
+      assert.match(await text(),/ログイン中：hana_01/);
+      assert.deepEqual(await cdp.evaluate(`JSON.parse(window.eqMock.calls.find(call=>call.url.includes('/username-auth')).body)`),{action:'signup',username:'hana_01',password:'password123'});
+      await click('[data-action="copy-guest"]');await click('[data-action="confirm-import"]');
+      await waitFor(`window.eqMock.remote?.progress.xp===70`);
+      const accountKey='english-quest-account-11111111-1111-4111-8111-111111111111';
+      async function localXp(){return cdp.evaluate(`JSON.parse(localStorage.getItem('${accountKey}')).xp`);}
+      async function answerOnce(){await click('[data-action="home"]');await click('[data-action="course"][data-category="vocabulary"]');await click('[data-action="start-all"]');await correctAnswer();await click('[data-action="account"]');}
+      await answerOnce();await waitFor(`window.eqMock.remote.progress.xp===80`);
+      assert.equal((await saved()).xp,70,'ゲストの記録は維持');assert.equal(await localXp(),80);
+      await cdp.evaluate(`window.eqMock.offline=true`);await answerOnce();
+      await waitFor(`document.querySelector('#cloud-status').textContent.includes('通信できません')`);
+      assert.equal(await localXp(),90);assert.equal(await cdp.evaluate('window.eqMock.remote.progress.xp'),80);
+      await cdp.evaluate(`window.eqMock.offline=false`);await click('[data-action="sync"]');await waitFor(`window.eqMock.remote.progress.xp===90`);
+      await cdp.evaluate(`window.eqMock.remote.revision++;window.eqMock.remote.progress.xp=1000`);
+      await answerOnce();await waitFor(`!!document.querySelector('[data-action="use-cloud"]')`);
+      assert.equal(await localXp(),100);await click('[data-action="use-cloud"]');await waitFor(`!document.querySelector('.sync-conflict')`);
+      assert.equal(await localXp(),1000);
+      assert.equal(await cdp.evaluate(`JSON.parse(localStorage.getItem('${accountKey}-before-sync')).xp`),100);
+      await cdp.evaluate(`window.eqMock.remote.revision++;window.eqMock.remote.progress.xp=2000`);
+      await answerOnce();await waitFor(`!!document.querySelector('[data-action="use-local"]')`);
+      await click('[data-action="use-local"]');await waitFor(`window.eqMock.remote.progress.xp===1010`);
+      assert.equal(await cdp.evaluate(`JSON.parse(localStorage.getItem('${accountKey}-cloud-before-sync')).xp`),2000);
+      await viewport(320);await noOverflow();await screenshot('account-mobile');
+      await click('[data-action="sign-out"]');await waitFor(`!!document.querySelector('#account-form')`);
+      assert.equal((await saved()).xp,70);assert.equal(await localXp(),1010);
+      assert.match(await text(),/ゲストで学習中/);
+      await cdp.evaluate(`document.querySelector('#account-username').value='hana_01';document.querySelector('#account-password').value='password123';document.querySelector('#account-form').requestSubmit(document.querySelector('button[value="login"]'))`);
+      await waitFor(`!!document.querySelector('[data-action="sign-out"]')&&!document.querySelector('[data-action="sync"]').disabled`);
+      assert.match(await text(),/累計 1010 XP/);
+      assert.deepEqual(await cdp.evaluate(`JSON.parse(window.eqMock.calls.filter(call=>call.url.includes('/username-auth')).at(-1).body)`),{action:'signin',username:'hana_01',password:'password123'});
       await cdp.send('Page.removeScriptToEvaluateOnNewDocument',{identifier:injection.identifier});
     });
     assert.deepEqual(cdp.errors,[],'再起動後もJavaScriptの未処理例外なし');

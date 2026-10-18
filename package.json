@@ -1,0 +1,11 @@
+{
+  "name": "english-quest",
+  "version": "3.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test tests/progress.test.js tests/analysis.test.js tests/cloud.test.js tests/username-auth.test.js tests/browser.test.js",
+    "test:built": "node scripts/test-built.js"
+  },
+  "engines": {"node": ">=22"}
+}
