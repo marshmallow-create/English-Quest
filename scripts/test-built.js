@@ -33,7 +33,7 @@ if(require.main===module){
       const paths=[...html.matchAll(/(?:src|href)="((?:scripts\/|style\.css)[^"]*)"/g)].map(m=>m[1]);
       assert.ok(paths.includes('scripts/cloud.js'));
       for(const file of paths){const result=await fetch(new URL(file,site.url));assert.equal(result.status,200,file);assert.ok((await result.text()).length>0,file);}
-      for(const hidden of ['.env','.git/config','tests/browser.test.js','scripts/build.js'])assert.equal((await fetch(new URL(hidden,site.url))).status,404,hidden);
+      for(const hidden of ['.env','.git/config','tests/browser.test.js','scripts/build.js','momo_choice_英単語一覧20261020.xlsx'])assert.equal((await fetch(new URL(hidden,site.url))).status,404,hidden);
       console.log(`Built HTTP check passed: ${paths.length} assets, CSP, private file exclusions`);
     }finally{await new Promise(resolve=>site.server.close(resolve));}
   })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -86,6 +86,7 @@
     }
     return {
       get user(){return session?.user||null;},
+      clearSession(){setSession(null);},
       async restore(){
         if(!session) return null;
         const data=await request('/auth/v1/user',{token:await token()});

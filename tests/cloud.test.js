@@ -9,11 +9,21 @@ const config={supabaseUrl:'https://example.supabase.co',supabasePublishableKey:'
 function memory(){const data=new Map();return{getItem:k=>data.get(k)??null,setItem:(k,v)=>data.set(k,v)};}
 const session={access_token:'access',refresh_token:'refresh',expires_in:3600,user:{id,user_metadata:{username:'hana_01'}}};
 function response(data,status=200){return new Response(data===null?'':JSON.stringify(data),{status});}
-test('未設定はゲスト利用、秘密キーやSupabase以外のURLを拒否',()=>{
+test('未設定では認証クライアントを作らず、秘密キーやSupabase以外のURLを拒否',()=>{
   assert.equal(C.createClient({},{}),null);
   assert.throws(()=>C.config({...config,supabaseUrl:'http://example.supabase.co'}));
   assert.throws(()=>C.config({...config,supabaseUrl:'https://example.evil.test'}));
   assert.throws(()=>C.config({...config,supabasePublishableKey:'sb_secret_testing'}));
+});
+
+test('認証切れでは端末のセッションだけを破棄し、未同期の学習記録を保持',async()=>{
+  const store=memory();const key=C.userKey(id);
+  store.setItem(key,JSON.stringify({...P.empty(),xp:70}));
+  const client=C.createClient(config,{storage:store,fetcher:async()=>response(session)});
+  await client.signIn('hana_01','password123');client.clearSession();
+  assert.equal(client.user,null);
+  assert.equal(JSON.parse(store.getItem('english-quest-auth-example.supabase.co')),null);
+  assert.equal(JSON.parse(store.getItem(key)).xp,70);
 });
 test('アカウント別保存はゲスト・別利用者・v1から独立し、復旧キーも分離',()=>{
   const store=memory();P.save(store,{...P.empty(),xp:90});

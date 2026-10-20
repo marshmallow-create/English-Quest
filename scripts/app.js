@@ -6,11 +6,11 @@
   // localStorage のプロパティアクセス自体が禁止されている環境にも対応。
   let storage;
   try { storage = window.localStorage; } catch { storage = {getItem(){throw new Error('Storage unavailable');},setItem(){throw new Error('Storage unavailable');}}; }
-  const loaded = P.load(storage,questions);
-  let progress = loaded.progress;
+  // 認証を確認するまでは、端末内の学習記録も読み込まない。
+  let progress = P.empty();
   let activeStorage = storage;
   let cloud = null;
-  let cloudMessage = 'ログイン・同期は公開版の接続設定後に利用できます。バックアップは今すぐ利用できます。';
+  let cloudMessage = 'この環境ではログイン設定がありません。公開版からアクセスしてください。';
   try { cloud = C.createClient(window.QuestConfig || {},{storage});if(cloud)cloudMessage='ログインすると、この端末とクラウドの学習記録を同期できます。'; } catch(error) { cloudMessage=error.message; }
   let currentUser = null;
   let revision;
@@ -20,10 +20,11 @@
   let generation = 0;
   let syncTimer;
   let pendingImport = null;
+  let checkingSession = false;
   const main = document.getElementById('main');
   let grade = 1;
   let category = 'vocabulary';
-  let screen = 'home';
+  let screen = 'login';
   let quest = null;
   let questTitle = '';
   let retryQuestions = [];
@@ -36,8 +37,8 @@
     element.textContent = message;
     element.hidden = !message;
   }
-  notice(loaded.notice);
   function persist() {
+    if(!currentUser)return;
     if (!P.save(activeStorage,progress)) notice('学習記録を保存できませんでした。保存容量やブラウザ設定をご確認ください。今回の記録は画面を閉じると失われる可能性があります。');
     if(currentUser) { dirty=true;saveMeta();clearTimeout(syncTimer);syncTimer=setTimeout(pushCloud,500); }
   }
@@ -45,7 +46,13 @@
     if(!currentUser)return;
     try{storage.setItem(C.userKey(currentUser.id)+':sync',JSON.stringify({revision,dirty}));}catch{notice('このブラウザへの保存が制限されています。画面を閉じる前にバックアップを書き出してください。');}
   }
-  function accountChanged() {if(screen==='account')accountScreen(false);}
+  function accountChanged() {if(screen==='account')accountScreen(false);else if(screen==='login')loginScreen(false);}
+  function requireLogin(error) {
+    if(error.status!==401&&error.status!==403)return false;
+    cloud.clearSession();switchUser(null);
+    cloudMessage='ログインの有効期限が切れました。もう一度ログインしてください。';
+    loginScreen();return true;
+  }
   function storeAccount(data,version) {
     progress=P.normalize(data,questions);revision=version;dirty=false;conflict=null;
     if(!P.save(activeStorage,progress))notice('クラウドの記録は読み込めましたが、ブラウザへの保存に失敗しました。');
@@ -55,7 +62,7 @@
     generation++;clearTimeout(syncTimer);busy=false;conflict=null;pendingImport=null;quest=null;
     currentUser=user;
     activeStorage=user?C.scopedStorage(storage,user.id):storage;
-    const next=P.load(activeStorage,questions);
+    const next=user?P.load(activeStorage,questions):{progress:P.empty(),notice:''};
     progress=next.progress;
     revision=undefined;dirty=false;
     if(user){
@@ -63,7 +70,7 @@
       // メタ情報を保存できなかった記録を、未保存の変更として保護する。
       if(revision===undefined && (progress.answered||progress.xp||progress.sessions))dirty=true;
     }
-    if(next.notice)notice(next.notice);
+    notice(next.notice);
   }
   async function refreshCloud() {
     if(!cloud||!currentUser||busy)return;
@@ -77,7 +84,7 @@
       else if(remote && (revision!==remote.revision || screen==='quiz')) {conflict={progress:remoteProgress,revision:remote.revision};cloudMessage='端末とクラウドに異なる記録があります。使う記録を選んでください。';}
       else if(!remote){revision=null;saveMeta();cloudMessage=dirty?'端末の記録をクラウドに保存します。':'クラウドの記録はまだありません。学習すると同期されます。';}
       else cloudMessage='端末に未同期の記録があります。';
-    }catch(error){if(ticket===generation)cloudMessage=error.message;}
+    }catch(error){if(ticket===generation&&!requireLogin(error))cloudMessage=error.message;}
     finally{if(ticket===generation){busy=false;accountChanged();}}
     if(ticket===generation&&dirty&&!conflict&&revision!==undefined)await pushCloud();
   }
@@ -94,6 +101,7 @@
     }catch(error){
       if(ticket!==generation)return;
       cloudMessage=error.message;
+      if(requireLogin(error))return;
       if(error.status===409){
         try{const remote=await cloud.read();if(ticket===generation&&remote)conflict={progress:C.parseBackup(JSON.stringify(remote.progress),P,questions),revision:remote.revision};}catch{ /* 端末の未同期記録は保持 */ }
       }
@@ -101,25 +109,38 @@
     if(ticket===generation&&succeeded&&dirty&&!conflict){clearTimeout(syncTimer);syncTimer=setTimeout(pushCloud,500);}
   }
   async function login(username,password,signup) {
-    if(!cloud||busy)return;
-    if(signup&&!window.QuestConfig?.signupEnabled){cloudMessage='新規登録は一時停止中です。ゲスト学習・バックアップをご利用ください。';accountChanged();return;}
+    if(!cloud||busy||checkingSession)return;
+    if(signup&&!window.QuestConfig?.signupEnabled){cloudMessage='新規登録は一時停止中です。作成済みのアカウントでログインしてください。';accountChanged();return;}
     busy=true;cloudMessage='ログイン情報を確認しています…';accountChanged();
     try{
       const user=signup?await cloud.signUp(username,password):await cloud.signIn(username,password);
-      if(user){switchUser(user);cloudMessage='ログインしました。ゲストの記録は別に残しています。';await refreshCloud();}
+      if(user){switchUser(user);cloudMessage='ログインしました。';await refreshCloud();if(currentUser)home();}
       else cloudMessage='登録・ログインを完了できませんでした。再試行してください。';
     }catch(error){cloudMessage=error.message;}
     finally{busy=false;accountChanged();}
   }
   async function logout() {
-    if(!cloud||busy)return;
-    busy=true;generation++;clearTimeout(syncTimer);accountChanged();
-    const error=await cloud.signOut();switchUser(null);
-    cloudMessage=error?'この端末からログアウトしました。通信できなかったため、サーバー側のセッション終了は確認できませんでした。':'ログアウトしました。ゲストの記録に戻りました。';
+    if(!cloud||!currentUser)return;
+    switchUser(null);busy=true;cloudMessage='ログアウトしています…';loginScreen();
+    const error=await cloud.signOut();busy=false;
+    cloudMessage=error?'この端末からログアウトしました。通信できなかったため、サーバー側のセッション終了は確認できませんでした。':'ログアウトしました。続けるにはログインしてください。';
     accountChanged();
   }
+  async function restoreSession() {
+    if(!cloud?.user||checkingSession||busy)return;
+    checkingSession=true;cloudMessage='ログイン状態を確認しています…';loginScreen(false);
+    try{
+      const user=await cloud.restore();
+      if(!user)throw new Error('もう一度ログインしてください。');
+      switchUser(user);await refreshCloud();if(currentUser)home(false);
+    }catch(error){if(!requireLogin(error))cloudMessage='ログイン状態を確認できませんでした。接続を確認して再試行するか、ログインしてください。';}
+    finally{checkingSession=false;if(!currentUser)loginScreen(false);}
+  }
   function display(html, focus = true) {
+    if(!currentUser&&screen!=='login'){loginScreen(focus);return;}
     main.innerHTML = html;
+    document.body.classList.toggle('auth-locked',!currentUser);
+    document.querySelector('nav').hidden=!currentUser;
     document.querySelectorAll('nav button').forEach(b => {
       if (b.dataset.action === screen) b.setAttribute('aria-current','page');
       else b.removeAttribute('aria-current');
@@ -132,6 +153,15 @@
     }
   }
   function back(action = 'home', text = 'ホームへ') { return `<button class="text-button back" data-action="${action}">← ${text}</button>`; }
+  function loginScreen(focus=true) {
+    screen='login';
+    const disabled=busy||checkingSession||!cloud?'disabled':'';
+    display(`<section class="login-layout"><div class="login-intro"><p class="eyebrow">ENGLISH QUEST · FOCUS TIME</p><span class="focus-symbol" aria-hidden="true">✦</span><h1>ひとつずつ、<br>自分の力に。</h1><p>静かな時間に、英語を少し。<br>今日の学びを、きみの記録につなげよう。</p><div class="focus-note"><span aria-hidden="true">◷</span> 1回最大10問。自分のペースで。</div></div>
+      <section class="account-panel login-panel" aria-labelledby="login-heading"><p class="eyebrow">WELCOME BACK</p><h2 id="login-heading">ログインして学習を始めよう</h2><p>ユーザー名とパスワードを入力してください。初めての方は「新規登録」から始められます。メールアドレスは不要です。</p><p id="cloud-status" role="status">${esc(cloudMessage)}</p>
+      <form id="account-form"><label for="account-username">ユーザー名</label><input id="account-username" type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]{3,24}" aria-describedby="username-help" required ${disabled}><small id="username-help">半角英字・数字・_、3〜24文字。大文字と小文字は区別しません。</small><label for="account-password">パスワード</label><input id="account-password" type="password" name="password" minlength="8" maxlength="64" autocomplete="current-password" aria-describedby="password-help" required ${disabled}><small id="password-help">半角英数字・記号、8〜64文字。</small><div class="account-actions"><button class="primary" type="submit" name="intent" value="login" ${disabled}>ログイン</button><button class="secondary" type="submit" name="intent" value="signup" ${disabled||!window.QuestConfig?.signupEnabled?'disabled':''}>新規登録</button></div></form>
+      ${cloud?.user&&!checkingSession?'<button class="text-button" data-action="restore-session">ログイン状態をもう一度確認する →</button>':''}
+      ${cloud&&!window.QuestConfig?.signupEnabled?'<p class="hint">現在、新規登録は一時停止中です。</p>':''}</section></section>`,focus);
+  }
   function gradePicker() {
     return `<div class="grade-picker" role="group" aria-label="学年を選択">${[1,2,3].map(g=>`<button data-action="grade" data-grade="${g}" aria-pressed="${g===grade}">中学${g}年<span>中${g}</span></button>`).join('')}</div>`;
   }
@@ -141,7 +171,7 @@
     const review = questions.filter(q => q.grade === grade && progress.reviewIds.includes(q.id));
     const today = progress.studyDates.includes(P.dayKey());
     display(`<section class="hero">
-      <div class="hero-copy"><p class="eyebrow">YOUR DAILY ADVENTURE</p><h1>今日の一歩を、<br><span>未来のチカラに。</span></h1><p>英語の世界を冒険しよう。<br>1回最大10問、きみだけのクエストが待っている！</p><span class="hero-badge">✦ まちがいも、成長のヒント。</span></div>
+      <div class="hero-copy"><p class="eyebrow">YOUR FOCUS SESSION</p><h1>今日の10問に、<span>集中しよう。</span></h1><p>英単語・英文法・復習から、今日のクエストを選ぼう。<br>まちがえた問題も、一歩ずつ自分の力に。</p><span class="hero-badge">✦ 自分のペースで、ひとつずつ。</span></div>
       <div class="hero-art" aria-hidden="true"><span class="art-star star-one">✧</span><span class="art-star star-two">✦</span><span class="art-label">LET’S EXPLORE!</span><div class="book-orbit"><div class="book">📖</div></div><span class="art-chip chip-a">Aa</span><span class="art-chip chip-b">+ XP</span><span class="art-path">● ┄┄┄ ● ┄┄┄ ★</span></div>
     </section>
     <section class="player-panel" aria-label="冒険のステータス">
@@ -158,13 +188,13 @@
       </div>
     </section>
     <section class="daily-panel"><div class="daily-icon" aria-hidden="true">${today?'🏅':'⚑'}</div><div><h2>${today?'今日のクエスト達成！':'今日のミッション'}</h2><p>${today?'この調子！ もう一度の挑戦も、明日の一歩も大歓迎。':'クエストを1回クリアしよう。最後の問題まで回答すると達成！'}</p></div><span class="daily-status">${today?'達成済み ✓':'未クリア'}</span></section>
-    <div class="home-summary"><span>これまでに <strong>${progress.answered}問</strong> に挑戦</span><span>累計正答率 <strong>${percent(progress.correct,progress.answered)}</strong></span><button class="text-button" data-action="records">学習記録を見る →</button></div>`,focus);
+    <div class="home-summary"><span>これまでに <strong>${progress.answered}問</strong> に挑戦</span><span>累計正答率 <strong>${percent(progress.correct,progress.answered)}</strong></span><button class="text-button" data-action="records">学習記録を見る →</button></div><div class="home-account-actions"><button class="text-button" data-action="sign-out">ログアウト</button></div>`,focus);
   }
   function unitScreen() {
     screen = 'units';
     const list = questions.filter(q => q.grade === grade && q.category === category);
     const matching = units.filter(u => u.grade === grade && u.category === category);
-    display(`${back()}<div class="page-heading"><p class="eyebrow">BUILD YOUR SKILLS</p><h1>中${grade} · ${categoryName(category)}クエスト</h1><p>気になる単元から始めよう。少ない問題でも、確かな一歩。</p></div>
+    display(`${back()}<div class="page-heading"><p class="eyebrow">BUILD YOUR SKILLS</p><h1>中${grade} · ${categoryName(category)}クエスト</h1><p>${grade===2?(category==='vocabulary'?'momoの単語リスト全271語・表現を収録。7つの単元から取り組もう。':'単語リストの語句を使った100問。基本から、現在完了の発展問題まで。'):'気になる単元から始めよう。少ない問題でも、確かな一歩。'}</p></div>
       <button class="wide-start" data-action="start-all"><span><strong>全単元にチャレンジ</strong><small>全${list.length}問からランダムに最大10問</small></span><span>スタート →</span></button>
       <h2 class="small-heading">単元を選ぶ</h2><div class="unit-grid">${matching.map((u,i)=>{
         const subset = list.filter(q=>q.unitId===u.id);
@@ -186,6 +216,13 @@
     screen = 'quiz';
     quiz();
   }
+  function wordExplanations(question) {
+    if(question.category!=='vocabulary')return '';
+    return `<section class="word-guide" aria-label="すべての選択肢の単語解説"><h3>4つの単語を確認しよう</h3><dl>${question.options.map(word=>{
+      const entry=window.QuestVocabulary[word];
+      return `<div><dt><span lang="en">${esc(word)}</span>${word===question.answer?'<small>この問題の正解</small>':''}</dt><dd><strong>${esc(entry.meaning)}</strong><span class="word-part">${esc(entry.partOfSpeech)}</span>${entry.note?`<p>${esc(entry.note)}</p>`:''}</dd></div>`;
+    }).join('')}</dl></section>`;
+  }
   function quiz() {
     const question = quest.questions[quest.index];
     const result = quest.answers[quest.index];
@@ -199,7 +236,7 @@
         const wrong = result && option === result.selected && !result.correct;
         return `<button class="option ${correct?'is-correct':''} ${wrong?'is-wrong':''}" data-action="answer" data-option="${i}" ${result?'disabled':''}><span class="option-letter" aria-hidden="true">${'ABCD'[i]}</span><span lang="en">${esc(option)}</span>${correct?'<strong>✓ 正解</strong>':wrong?'<strong>✕ 選んだ答え</strong>':''}</button>`;
       }).join('')}</div>
-      ${result ? `<div id="feedback" class="feedback ${result.correct?'positive':'negative'}" tabindex="-1" role="status"><h2>${result.correct?'✓ 正解！':'✕ おしい！ 次につなげよう'}</h2><p>正解：<strong lang="en">${esc(question.answer)}</strong></p><p>${esc(question.explanation)}</p><div class="reward">${result.correct?`+${result.xp} XP`:'この問題を復習リストに登録しました'}${result.bonus?' · 5問連続正解ボーナス +20 XP を含む':''}${result.levelUp?' · 🎉 レベルアップ！':''}</div></div><button class="primary next" data-action="next">${quest.completed?'結果を見る ✦':'次の問題へ →'}</button>` : ''}
+      ${result ? `<div id="feedback" class="feedback ${result.correct?'positive':'negative'}" tabindex="-1" role="status"><h2>${result.correct?'✓ 正解！':'✕ おしい！ 次につなげよう'}</h2><p>正解：<strong lang="en">${esc(question.answer)}</strong></p><div class="answer-explanation"><h3>解説</h3><p>${esc(question.explanation)}</p></div>${wordExplanations(question)}<div class="reward">${result.correct?`+${result.xp} XP`:'この問題を復習リストに登録しました'}${result.bonus?' · 5問連続正解ボーナス +20 XP を含む':''}${result.levelUp?' · 🎉 レベルアップ！':''}</div></div><button class="primary next" data-action="next">${quest.completed?'結果を見る ✦':'次の問題へ →'}</button>` : ''}
       </div></section>`,!result);
     if (result) document.getElementById('feedback').focus();
   }
@@ -213,19 +250,19 @@
       <div class="result-actions">${mistakes.length?'<button class="primary" data-action="retry-mistakes">まちがえた問題を復習 →</button>':''}<button class="${mistakes.length?'secondary':'primary'}" data-action="retry">もう一度挑戦</button><button class="text-button" data-action="home">ホームへ戻る</button></div></section>`);
   }
   function accountScreen(focus=true) {
+    if(!currentUser){loginScreen(focus);return;}
     screen='account';
     const disabled=busy?'disabled':'';
-    display(`${back()}<div class="page-heading"><p class="eyebrow">SAVE YOUR ADVENTURE</p><h1>保存・同期</h1><p>登録なしでも学習できます。大切な記録を、自分の方法で保存しよう。</p></div>
-      <section class="account-panel"><h2>${currentUser?'アカウントで学習中':'ゲストで学習中'}</h2><p>${currentUser?`ログイン中：${esc(currentUser.username||'学習者')}<br>アカウントの記録とゲストの記録は別に保存します。`:'今の記録はこのブラウザに保存されています。'}</p><div class="backup-summary"><span>累計 <strong>${progress.xp} XP</strong></span><span><strong>${progress.answered}回</strong>回答</span><span>復習 <strong>${progress.reviewIds.length}問</strong></span></div>
-      <h3>バックアップ</h3><p>ファイルを書き出して、別の端末や公開版の「取り込み」から続けられます。ログイン情報は含みません。</p><button class="secondary" data-action="export">記録を書き出す</button><label class="file-label" for="backup-file">バックアップを取り込む（JSON・4MBまで）</label><input id="backup-file" type="file" accept=".json,application/json" ${disabled}>
-      ${pendingImport?`<div class="import-preview"><h3>取り込む記録の確認</h3><p>${pendingImport.xp} XP · ${pendingImport.answered}回回答 · 復習${pendingImport.reviewIds.length}問<br>現在表示中の記録を置き換えます。現在の記録はブラウザの復旧用キーにも退避します。</p><button class="primary" data-action="confirm-import" ${disabled}>この記録で置き換える</button> <button class="text-button" data-action="cancel-import">キャンセル</button></div>`:''}</section>
-      <section class="account-panel"><h2>任意ログイン・クラウド同期</h2><p id="cloud-status" role="status">${esc(cloudMessage)}</p>
-      ${cloud?currentUser?`<p>回答は端末に保存してから同期します。通信が戻ったら「同期する」で再試行できます。</p><div class="account-actions"><button class="primary" data-action="sync" ${disabled}>同期する</button><button class="secondary" data-action="sign-out" ${disabled}>ログアウト</button></div><button class="text-button" data-action="copy-guest" ${disabled}>ゲスト記録をこのアカウントに取り込む →</button>
-      ${conflict?`<div class="sync-conflict"><h3>どちらの記録を使いますか？</h3><p>自動で足し合わせず、両方の記録を残したまま選べます。選択前に必要な記録を書き出してください。</p><div class="backup-summary"><span>この端末：${progress.xp} XP / ${progress.answered}回回答</span><span>クラウド：${conflict.progress.xp} XP / ${conflict.progress.answered}回回答</span></div><button class="secondary" data-action="use-cloud" ${disabled}>クラウドの記録をこの端末で使う</button><button class="secondary" data-action="use-local" ${disabled}>この端末の記録でクラウドを置き換える</button></div>`:''}`:`<p>ユーザー名とパスワードで登録・ログインできます。メールアドレスやメール確認は不要です。同じアカウントなら、別のスマホでも成績や進捗を引き継げます。</p><form id="account-form"><label for="account-username">ユーザー名</label><input id="account-username" type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="24" pattern="[A-Za-z0-9_]{3,24}" aria-describedby="username-help" required ${disabled}><small id="username-help">半角英字・数字・_、3〜24文字（例：hana_01）。大文字と小文字は区別しません。</small><label for="account-password">パスワード（半角英数字・記号8〜64文字）</label><input id="account-password" type="password" name="password" minlength="8" maxlength="64" autocomplete="current-password" required ${disabled}><div class="account-actions"><button class="primary" type="submit" name="intent" value="login" ${disabled}>ログイン</button><button class="secondary" type="submit" name="intent" value="signup" ${disabled}>新規登録</button></div></form>`:''}
-      ${cloud&&!currentUser&&!window.QuestConfig?.signupEnabled?'<p class="notice">新規登録は一時停止中です。ゲスト学習と既存アカウントのログインは利用できます。</p>':''}
-      <p class="hint">共有端末では、学習後にログアウトしてください。ゲストの記録とバックアップは、ブラウザデータやファイルを削除すると失われます。ログイン後も、ファイルの保管先にご注意ください。</p></section>`,focus);
-    const signupButton=main.querySelector('button[value="signup"]');
-    if(signupButton&&!window.QuestConfig?.signupEnabled)signupButton.disabled=true;
+    let legacy=false;
+    try{legacy=Boolean(storage.getItem(P.KEY)||storage.getItem('english-quest-v1'));}catch{ /* 保存不可でも学習・同期画面は利用する */ }
+    display(`${back()}<div class="page-heading"><p class="eyebrow">YOUR LEARNING SPACE</p><h1>保存・同期</h1><p>積み重ねた学びを、大切に残そう。</p></div>
+      <section class="account-panel"><h2>アカウントで学習中</h2><p>ログイン中：${esc(currentUser.username||'学習者')}<br>成績・進捗はこのアカウント専用の記録として保存されます。</p><div class="backup-summary"><span>累計 <strong>${progress.xp} XP</strong></span><span><strong>${progress.answered}回</strong>回答</span><span>復習 <strong>${progress.reviewIds.length}問</strong></span></div>
+      <h3>バックアップ</h3><p>学習記録をJSONファイルに保存できます。ログイン情報は含みません。</p><button class="secondary" data-action="export">記録を書き出す</button><label class="file-label" for="backup-file">バックアップを取り込む（JSON・4MBまで）</label><input id="backup-file" type="file" accept=".json,application/json" ${disabled}>
+      ${legacy?`<button class="text-button" data-action="copy-guest" ${disabled}>以前のゲスト記録をこのアカウントに取り込む →</button>`:''}
+      ${pendingImport?`<div class="import-preview"><h3>取り込む記録の確認</h3><p>${pendingImport.xp} XP · ${pendingImport.answered}回回答 · 復習${pendingImport.reviewIds.length}問<br>このアカウントの記録を置き換えます。現在の記録はブラウザの復旧用キーにも退避します。</p><button class="primary" data-action="confirm-import" ${disabled}>この記録で置き換える</button> <button class="text-button" data-action="cancel-import">キャンセル</button></div>`:''}</section>
+      <section class="account-panel"><h2>クラウド同期</h2><p id="cloud-status" role="status">${esc(cloudMessage)}</p><p>回答は端末に保存してから同期します。同期済みの記録は、別の端末でも同じアカウントで引き継げます。通信が戻ったら「同期する」で再試行できます。</p><div class="account-actions"><button class="primary" data-action="sync" ${disabled}>同期する</button><button class="secondary" data-action="sign-out" ${disabled}>ログアウト</button></div>
+      ${conflict?`<div class="sync-conflict"><h3>どちらの記録を使いますか？</h3><p>自動で足し合わせず、両方の記録を残したまま選べます。選択前に必要な記録を書き出してください。</p><div class="backup-summary"><span>この端末：${progress.xp} XP / ${progress.answered}回回答</span><span>クラウド：${conflict.progress.xp} XP / ${conflict.progress.answered}回回答</span></div><button class="secondary" data-action="use-cloud" ${disabled}>クラウドの記録をこの端末で使う</button><button class="secondary" data-action="use-local" ${disabled}>この端末の記録でクラウドを置き換える</button></div>`:''}
+      <p class="hint">共有端末では、学習後にログアウトしてください。未同期の記録やバックアップファイルは大切に保管してください。</p></section>`,focus);
   }
   function exportProgress() {
     const content=JSON.stringify({application:'english-quest',formatVersion:1,exportedAt:new Date().toISOString(),data:progress},null,2);
@@ -258,7 +295,7 @@
         try{const remote=await cloud.read();if(ticket!==generation)return;if(!remote)throw new Error('クラウド記録が見つかりませんでした。');storeAccount(C.parseBackup(JSON.stringify(remote.progress),P,questions),remote.revision);cloudMessage='クラウドの記録をこの端末に復元しました。';}
         finally{if(ticket===generation)busy=false;}
       }
-    }catch(error){cloudMessage=error.message;}
+    }catch(error){if(!requireLogin(error))cloudMessage=error.message;}
     accountChanged();
   }
   document.addEventListener('submit',event=>{
@@ -268,7 +305,7 @@
     login(String(fields.get('username')),String(fields.get('password')),event.submitter?.value==='signup');
   });
   document.addEventListener('change',async event=>{
-    if(event.target.id!=='backup-file')return;
+    if(event.target.id!=='backup-file'||!currentUser)return;
     const file=event.target.files?.[0];if(!file)return;
     const ticket=generation;
     try{
@@ -294,11 +331,12 @@
       ${analysisPanel()}
       <h2 class="small-heading">単元ごとの記録</h2><div class="record-units">${[1,2,3].map(g=>`<section class="record-grade"><h3>中学${g}年</h3>${units.filter(u=>u.grade===g).map(u=>{const s=statsFor(questions.filter(q=>q.unitId===u.id));return `<div class="record-row"><span>${esc(u.name)}<small>${categoryName(u.category)} · ${s.attempts}回回答</small></span><strong>${percent(s.correct,s.attempts)}</strong></div>`;}).join('')}</section>`).join('')}</div>
       <h2 class="small-heading">問題ごとの回答履歴</h2><div class="history-list">${questions.filter(q=>progress.questionStats[q.id]?.attempts).map(q=>{const s=progress.questionStats[q.id];return `<details><summary><span>中${q.grade} · ${esc(q.prompt)}</span><small>${s.correct} / ${s.attempts}回正解</small></summary>${s.history.length?`<ol>${[...s.history].reverse().map(h=>`<li><time datetime="${esc(h.at)}">${esc(new Date(h.at).toLocaleString('ja-JP'))}</time><span>${h.correct?'✓ 正解':'✕ 不正解'} · ${esc(h.selected)}</span></li>`).join('')}</ol>`:'<p>過去の回答日時は記録されていません。</p>'}</details>`;}).join('')||'<p class="hint">まだ回答履歴はありません。最初のクエストに挑戦してみよう！</p>'}</div>
-      ${progress.migrationNote?`<p class="notice">${esc(progress.migrationNote)}</p>`:''}<p class="hint">学習日数と連続学習は、クエストの最後まで回答した端末のローカル日付で記録します。途中までの回答も、XP・正答率・問題別履歴に残ります。</p>`);
+      ${progress.migrationNote?`<p class="notice">${esc(progress.migrationNote)}</p>`:''}<p class="hint">学習日数と連続学習は、クエストの最後まで回答した端末のローカル日付で記録します。途中までの回答も、XP・正答率・問題別履歴に残ります。</p><button class="text-button" data-action="account">データ管理</button>`);
   }
   document.addEventListener('click',event=>{
     const button = event.target.closest('[data-action]');
     if (!button || button.disabled) return;
+    if(!currentUser){if(button.dataset.action==='restore-session')restoreSession();else loginScreen();return;}
     switch (button.dataset.action) {
       case 'home': case 'exit': home(); break;
       case 'records': records(); break;
@@ -341,9 +379,6 @@
     history.replaceState(null,'',location.pathname+location.search);
     cloudMessage='「保存・同期」からログインしてください。';
   }
-  if(cloud?.user){
-    try{switchUser(cloud.user);}catch(error){cloudMessage=error.message;}
-  }
-  home(false);
-  if(cloud?.user)cloud.restore().then(()=>refreshCloud()).catch(error=>{cloudMessage=error.message;accountChanged();});
+  loginScreen(false);
+  if(cloud?.user)restoreSession();
 })();

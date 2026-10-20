@@ -51,8 +51,11 @@
     ['eq3-g05',3,'grammar','g3-relative','The boy ___ soccer over there is my brother.',['play','plays','played','playing'],'playing','「向こうでサッカーをしている少年」と説明するには、名詞の後ろに現在分詞 playing を置きます。']
   ];
   const extra = typeof module !== 'undefined' && module.exports ? require('./questions-step2.js') : root.QuestExtraQuestions;
-  const questions = rows.map(([id,grade,category,unitId,prompt,options,answer,explanation]) => ({id,grade,category,unitId,prompt,options,answer,explanation})).concat(extra);
-  const data = { units, questions };
+  const momo=typeof module!=='undefined'&&module.exports?require('./momo-quest.js'):root.QuestMomo;
+  const legacy=rows.map(([id,grade,category,unitId,prompt,options,answer,explanation]) => ({id,grade,category,unitId,prompt,options,answer,explanation})).concat(extra);
+  // 中2の旧教材は新IDの教材へ置き換え、中1・中3の問題はそのまま残す。
+  const questions=legacy.filter(question=>question.grade!==2).concat(momo.questions);
+  const data = { units:units.filter(unit=>unit.grade!==2).concat(momo.units), questions, curriculum:momo.source };
   if (typeof module !== 'undefined' && module.exports) module.exports = data;
   else root.QuestData = data;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

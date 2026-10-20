@@ -15,10 +15,10 @@ function run(progress,list,correct=true,date=new Date(2026,9,17,12)) {
   } while(P.next(quest));
   return quest;
 }
-test('全300問に固定ID・4つの異なる選択肢・一意の正解・対応単元がある',()=>{
-  assert.equal(questions.length,300);
-  assert.equal(new Set(questions.map(q=>q.id)).size,300);
-  assert.equal(new Set(questions.map(q=>q.prompt.trim())).size,300,'同じ問題文で水増ししない');
+test('全571問に固定ID・4つの異なる選択肢・一意の正解・対応単元がある',()=>{
+  assert.equal(questions.length,571);
+  assert.equal(new Set(questions.map(q=>q.id)).size,571);
+  assert.equal(new Set(questions.map(q=>q.prompt.trim())).size,571,'同じ問題文で水増ししない');
   for(const q of questions){
     assert.equal(q.options.length,4);
     assert.equal(new Set(q.options).size,4);
@@ -27,7 +27,7 @@ test('全300問に固定ID・4つの異なる選択肢・一意の正解・対�
     assert.ok(units.some(u=>u.id===q.unitId&&u.grade===q.grade&&u.category===q.category));
   }
 });
-test('3学年×2コースと全15単元が最後まで進み、コース別XP・ボーナスを付与',()=>{
+test('3学年×2コースと全27単元が最後まで進み、コース別XP・ボーナスを付与',()=>{
   for(const grade of [1,2,3]) for(const category of ['vocabulary','grammar']) {
     const progress=P.empty();
     const quest=run(progress,questions.filter(q=>q.grade===grade&&q.category===category));

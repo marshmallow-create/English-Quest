@@ -7,3 +7,4 @@ supabase
 README.md
 node_modules
 dist
+*.xlsx
